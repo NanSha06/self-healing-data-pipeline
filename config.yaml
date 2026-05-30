@@ -1,0 +1,40 @@
+schema:
+  columns:
+    id:
+      type: int
+      nullable: false
+      unique: true
+
+    name:
+      type: str
+      nullable: false
+
+    age:
+      type: int
+      nullable: false
+      min: 0
+      max: 120
+
+    email:
+      type: str
+      nullable: false
+      regex: "^[\\w.-]+@[\\w.-]+\\.\\w+$"
+
+    country:
+      type: str
+      nullable: false
+      allowed_values: [IN, US, UK, DE, FR, CA]
+
+    salary:
+      type: float
+      nullable: true
+      min: 0
+
+    signup_date:
+      type: date
+      nullable: false
+
+pipeline:
+  max_heal_retries: 3
+  quarantine_on_failure: true
+  confidence_threshold: 0.7
