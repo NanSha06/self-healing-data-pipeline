@@ -5,12 +5,18 @@ Main orchestrator for the Self-Healing Data Pipeline.
 
 Ties together ingestion, validation, anomaly detection, healing, and output
 into a single end-to-end run. Every stage is logged and timed. Results are
-written to the output directory and the audit log.
+written to the output directory and the full 3-table audit log (logger.py).
 
 Usage (command line):
     python pipeline.py --input data/sample.csv
     python pipeline.py --input data/sample.csv --output output/clean.csv
     python pipeline.py --input data/sample.csv --config config.yaml --no-heal
+    python pipeline.py --history
+    python pipeline.py --history --status failed
+    python pipeline.py --repairs <run_id>
+    python pipeline.py --issues  <run_id>
+    python pipeline.py --stats
+    python pipeline.py --export-audit
 
 Usage (as a module):
     from pipeline import Pipeline
@@ -20,11 +26,9 @@ Usage (as a module):
 
 import os
 import sys
-import json
 import uuid
 import argparse
 import time
-import sqlite3
 import pandas as pd
 import yaml
 from datetime import datetime
@@ -36,6 +40,7 @@ from typing import Optional
 from validator import Validator
 from anomaly   import AnomalyDetector
 from healer    import Healer
+from logger    import AuditLogger
 
 load_dotenv()
 
@@ -84,20 +89,20 @@ class PipelineResult:
         print("\n" + "═" * 62)
         print(f"  {icon}  PIPELINE RUN COMPLETE")
         print("═" * 62)
-        print(f"  Run ID          : {self.run_id}")
-        print(f"  Status          : {self.status.upper()}")
-        print(f"  Input           : {self.input_path}")
-        print(f"  Output          : {self.output_path or 'N/A'}")
-        print(f"  Total rows      : {self.total_rows}")
-        print(f"  Rows written    : {self.rows_written}")
+        print(f"  Run ID            : {self.run_id}")
+        print(f"  Status            : {self.status.upper()}")
+        print(f"  Input             : {self.input_path}")
+        print(f"  Output            : {self.output_path or 'N/A'}")
+        print(f"  Total rows        : {self.total_rows}")
+        print(f"  Rows written      : {self.rows_written}")
         print(f"  Validation issues : {self.validation_issues}")
-        print(f"  Anomalies found : {self.anomalies_detected}")
-        print(f"  Issues healed   : {self.issues_healed}")
-        print(f"  Issues remaining: {self.issues_remaining}")
-        print(f"  Heal attempts   : {self.heal_attempts}")
-        print(f"  Duration        : {self.duration_seconds:.2f}s")
+        print(f"  Anomalies found   : {self.anomalies_detected}")
+        print(f"  Issues healed     : {self.issues_healed}")
+        print(f"  Issues remaining  : {self.issues_remaining}")
+        print(f"  Heal attempts     : {self.heal_attempts}")
+        print(f"  Duration          : {self.duration_seconds:.2f}s")
         if self.error_message:
-            print(f"  Error           : {self.error_message}")
+            print(f"  Error             : {self.error_message}")
         print("═" * 62 + "\n")
 
     def to_dict(self) -> dict:
@@ -128,12 +133,12 @@ class Pipeline:
     End-to-end self-healing data pipeline.
 
     Stages:
-        1. Ingest     — load CSV (or DataFrame) into pandas
-        2. Validate   — run schema/rule checks (validator.py)
-        3. Detect     — run statistical anomaly checks (anomaly.py)
-        4. Heal       — call LLM to fix issues (healer.py)  [optional]
-        5. Output     — write clean data to CSV
-        6. Audit      — persist run metadata to SQLite
+        1. Ingest   — load CSV / Excel / JSON / Parquet into pandas
+        2. Validate — schema + rule checks        (validator.py)
+        3. Detect   — statistical anomaly checks  (anomaly.py)
+        4. Heal     — LLM-powered auto-fix        (healer.py)   [optional]
+        5. Output   — write clean CSV to disk
+        6. Audit    — persist full 3-table record  (logger.py)
     """
 
     AUDIT_DB = "pipeline_audit.db"
@@ -144,22 +149,25 @@ class Pipeline:
         with open(config_path) as f:
             self.config = yaml.safe_load(f)
 
-        self.pipeline_cfg  = self.config.get("pipeline", {})
-        self.output_dir    = self.pipeline_cfg.get("output_dir", "output")
+        self.pipeline_cfg = self.config.get("pipeline", {})
+        self.output_dir   = self.pipeline_cfg.get("output_dir", "output")
         os.makedirs(self.output_dir, exist_ok=True)
 
+        # Core modules
         self.validator = Validator(config_path)
         self.detector  = AnomalyDetector(config_path)
         self.healer    = Healer(config_path)
 
-        self._init_audit_db()
+        # Full 3-table audit logger (replaces inline SQLite from old version)
+        self.audit = AuditLogger(self.AUDIT_DB)
+
         logger.info(f"Pipeline initialised. config={config_path}")
 
     # ── Public entry point ──────────────────────
 
     def run(
         self,
-        input_source: str | pd.DataFrame,
+        input_source: "str | pd.DataFrame",
         output_path: Optional[str] = None,
         heal: bool = True,
         run_id: Optional[str] = None,
@@ -168,17 +176,17 @@ class Pipeline:
         Execute a full pipeline run.
 
         Args:
-            input_source : path to a CSV file, or a pandas DataFrame directly.
-            output_path  : where to write the clean output CSV.
+            input_source : path to a CSV/Excel/JSON/Parquet file, or a DataFrame.
+            output_path  : destination CSV path.
                            Defaults to output/<run_id>_clean.csv
-            heal         : if False, skip the healing stage (validate + detect only).
+            heal         : set False to skip healing (validate + detect only).
             run_id       : optional custom run identifier.
 
         Returns:
             PipelineResult with full run metadata.
         """
-        run_id  = run_id or str(uuid.uuid4())[:8]
-        result  = PipelineResult(
+        run_id     = run_id or str(uuid.uuid4())[:8]
+        result     = PipelineResult(
             run_id=run_id,
             input_path=str(input_source) if isinstance(input_source, str) else "<DataFrame>",
         )
@@ -188,11 +196,16 @@ class Pipeline:
         logger.info(f"Pipeline run started  run_id={run_id}")
         logger.info(f"{'─'*50}")
 
+        # Keep reports in scope so _finalise can write all 3 audit tables
+        val_report  = None
+        anom_report = None
+        heal_result = None
+
         try:
             # ── Stage 1: Ingest ──────────────────
             df = self._stage_ingest(input_source, result)
             if df is None:
-                return self._finalise(result, start_time)
+                return self._finalise(result, start_time, val_report, anom_report, heal_result)
 
             # ── Stage 2: Validate ────────────────
             val_report = self._stage_validate(df, result)
@@ -204,13 +217,15 @@ class Pipeline:
 
             # ── Stage 4: Heal ────────────────────
             if heal and total_issues > 0:
-                df = self._stage_heal(df, val_report, anom_report, result, run_id)
+                df, heal_result = self._stage_heal(
+                    df, val_report, anom_report, result, run_id
+                )
             elif total_issues == 0:
                 logger.success("Data is clean — skipping healing stage.")
                 result.status = "success"
             else:
                 logger.info("Healing disabled — skipping healing stage.")
-                result.status  = "partial"
+                result.status           = "partial"
                 result.issues_remaining = total_issues
 
             # ── Stage 5: Output ──────────────────
@@ -222,7 +237,7 @@ class Pipeline:
             logger.exception(f"Pipeline run failed: {e}")
 
         finally:
-            self._finalise(result, start_time)
+            self._finalise(result, start_time, val_report, anom_report, heal_result)
 
         return result
 
@@ -230,7 +245,7 @@ class Pipeline:
 
     def _stage_ingest(
         self,
-        input_source: str | pd.DataFrame,
+        input_source: "str | pd.DataFrame",
         result: PipelineResult,
     ) -> Optional[pd.DataFrame]:
         logger.info("[ Stage 1 / 5 ]  Ingesting data...")
@@ -243,17 +258,16 @@ class Pipeline:
                 if not os.path.exists(input_source):
                     raise FileNotFoundError(f"Input file not found: {input_source}")
                 ext = os.path.splitext(input_source)[1].lower()
-                if ext == ".csv":
-                    df = pd.read_csv(input_source)
-                elif ext in (".xlsx", ".xls"):
-                    df = pd.read_excel(input_source)
-                elif ext == ".json":
-                    df = pd.read_json(input_source)
-                elif ext == ".parquet":
-                    df = pd.read_parquet(input_source)
-                else:
-                    raise ValueError(f"Unsupported file format: {ext}")
-
+                loaders = {
+                    ".csv":     pd.read_csv,
+                    ".xlsx":    pd.read_excel,
+                    ".xls":     pd.read_excel,
+                    ".json":    pd.read_json,
+                    ".parquet": pd.read_parquet,
+                }
+                if ext not in loaders:
+                    raise ValueError(f"Unsupported file format: '{ext}'")
+                df = loaders[ext](input_source)
                 logger.info(
                     f"Loaded '{input_source}' — {len(df)} rows, {len(df.columns)} cols."
                 )
@@ -301,7 +315,7 @@ class Pipeline:
         anom_report,
         result: PipelineResult,
         run_id: str,
-    ) -> pd.DataFrame:
+    ):
         total_issues = result.validation_issues + result.anomalies_detected
         logger.info(
             f"[ Stage 4 / 5 ]  Healing {total_issues} issue(s) "
@@ -315,14 +329,14 @@ class Pipeline:
             batch_id=run_id,
         )
 
-        result.heal_attempts   = len(heal_result.attempts)
-        result.issues_healed   = max(0, total_issues - heal_result.final_issue_count)
+        result.heal_attempts    = len(heal_result.attempts)
+        result.issues_healed    = max(0, total_issues - heal_result.final_issue_count)
         result.issues_remaining = heal_result.final_issue_count
 
         if heal_result.quarantined:
             result.status = "quarantined"
             logger.warning("Batch quarantined — returning original DataFrame.")
-            return df
+            return df, heal_result
 
         if heal_result.success:
             result.status = "success" if heal_result.final_issue_count == 0 else "partial"
@@ -330,11 +344,11 @@ class Pipeline:
                 f"Healing complete — {result.issues_healed} issue(s) fixed, "
                 f"{result.issues_remaining} remaining."
             )
-            return heal_result.fixed_df
+            return heal_result.fixed_df, heal_result
 
         result.status = "failed"
         logger.error("Healing failed — returning original DataFrame.")
-        return df
+        return df, heal_result
 
     def _stage_output(
         self,
@@ -353,62 +367,57 @@ class Pipeline:
         result.rows_written = len(df)
         logger.success(f"Output written → {output_path}  ({len(df)} rows)")
 
-    # ── Audit log ───────────────────────────────
+    # ── Finalise + full audit write ─────────────
 
-    def _init_audit_db(self) -> None:
-        """Create the audit table if it doesn't exist."""
-        with sqlite3.connect(self.AUDIT_DB) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS pipeline_runs (
-                    run_id              TEXT PRIMARY KEY,
-                    input_path          TEXT,
-                    output_path         TEXT,
-                    status              TEXT,
-                    total_rows          INTEGER,
-                    rows_written        INTEGER,
-                    validation_issues   INTEGER,
-                    anomalies_detected  INTEGER,
-                    issues_healed       INTEGER,
-                    issues_remaining    INTEGER,
-                    heal_attempts       INTEGER,
-                    duration_seconds    REAL,
-                    error_message       TEXT,
-                    timestamp           TEXT
-                )
-            """)
-        logger.debug(f"Audit DB ready — {self.AUDIT_DB}")
+    def _finalise(
+        self,
+        result: PipelineResult,
+        start_time: float,
+        val_report=None,
+        anom_report=None,
+        heal_result=None,
+    ) -> PipelineResult:
+        result.duration_seconds = round(time.time() - start_time, 3)
 
-    def _write_audit(self, result: PipelineResult) -> None:
-        """Persist run metadata to SQLite audit log."""
-        try:
-            d = result.to_dict()
-            with sqlite3.connect(self.AUDIT_DB) as conn:
-                conn.execute("""
-                    INSERT OR REPLACE INTO pipeline_runs VALUES
-                    (:run_id, :input_path, :output_path, :status,
-                     :total_rows, :rows_written, :validation_issues,
-                     :anomalies_detected, :issues_healed, :issues_remaining,
-                     :heal_attempts, :duration_seconds, :error_message, :timestamp)
-                """, d)
-            logger.debug(f"Audit record written for run_id={result.run_id}")
-        except Exception as e:
-            logger.warning(f"Failed to write audit record: {e}")
+        # 1. Run summary row
+        self.audit.log_run(result)
 
-    def get_audit_history(self, limit: int = 20) -> pd.DataFrame:
-        """Return the last N pipeline runs as a DataFrame."""
-        with sqlite3.connect(self.AUDIT_DB) as conn:
-            return pd.read_sql(
-                f"SELECT * FROM pipeline_runs ORDER BY timestamp DESC LIMIT {limit}",
-                conn,
+        # 2. Per-issue detail (validation + anomaly)
+        if val_report is not None or anom_report is not None:
+            self.audit.log_issues(
+                run_id=result.run_id,
+                validation_report=val_report,
+                anomaly_report=anom_report,
             )
 
-    # ── Helpers ─────────────────────────────────
+        # 3. LLM repair attempts
+        if heal_result is not None:
+            self.audit.log_heal(heal_result, run_id=result.run_id)
 
-    def _finalise(self, result: PipelineResult, start_time: float) -> PipelineResult:
-        result.duration_seconds = round(time.time() - start_time, 3)
-        self._write_audit(result)
         result.print_summary()
         return result
+
+    # ── Convenience query pass-throughs ─────────
+
+    def get_history(self, limit: int = 20, status: Optional[str] = None) -> pd.DataFrame:
+        """Return recent pipeline runs from the audit log."""
+        return self.audit.get_runs(limit=limit, status=status)
+
+    def get_repairs(self, run_id: Optional[str] = None, limit: int = 50) -> pd.DataFrame:
+        """Return LLM repair attempt records from the audit log."""
+        return self.audit.get_repairs(run_id=run_id, limit=limit)
+
+    def get_issues(self, run_id: Optional[str] = None, limit: int = 100) -> pd.DataFrame:
+        """Return per-issue event records from the audit log."""
+        return self.audit.get_issues(run_id=run_id, limit=limit)
+
+    def print_stats(self) -> None:
+        """Print aggregate statistics across all pipeline runs."""
+        self.audit.print_stats()
+
+    def export_audit(self, output_path: str = "audit_export.json") -> None:
+        """Export the full audit log to a JSON file."""
+        self.audit.export_json(output_path)
 
 
 # ─────────────────────────────────────────────
@@ -426,35 +435,74 @@ Examples:
   python pipeline.py --input data/sample.csv --no-heal
   python pipeline.py --input data/sample.csv --config config.yaml
   python pipeline.py --history
+  python pipeline.py --history --status failed
+  python pipeline.py --repairs <run_id>
+  python pipeline.py --issues  <run_id>
+  python pipeline.py --stats
+  python pipeline.py --export-audit
         """,
     )
-    parser.add_argument("--input",   "-i", help="Path to input CSV/Excel/JSON/Parquet file")
-    parser.add_argument("--output",  "-o", help="Path for the clean output CSV (optional)")
-    parser.add_argument("--config",  "-c", default="config.yaml", help="Path to config.yaml")
-    parser.add_argument("--no-heal",       action="store_true",   help="Skip healing stage")
-    parser.add_argument("--history",       action="store_true",   help="Print last 20 audit runs")
-    parser.add_argument("--run-id",        help="Custom run ID (optional)")
+    parser.add_argument("--input",        "-i", help="Path to input file (CSV/Excel/JSON/Parquet)")
+    parser.add_argument("--output",       "-o", help="Path for clean output CSV (optional)")
+    parser.add_argument("--config",       "-c", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument("--no-heal",            action="store_true",   help="Skip healing stage")
+    parser.add_argument("--run-id",             help="Custom run ID (optional)")
+    parser.add_argument("--history",            action="store_true",   help="Show last 20 runs")
+    parser.add_argument("--status",             help="Filter --history by status (success/failed/partial/quarantined)")
+    parser.add_argument("--repairs",            metavar="RUN_ID",      help="Show repair attempts for a run ID")
+    parser.add_argument("--issues",             metavar="RUN_ID",      help="Show issue events for a run ID")
+    parser.add_argument("--stats",              action="store_true",   help="Show aggregate stats")
+    parser.add_argument("--export-audit",       action="store_true",   help="Export audit log to audit_export.json")
     return parser.parse_args()
 
 
 def main() -> None:
     _setup_logger()
-    args = _parse_args()
-
+    args     = _parse_args()
     pipeline = Pipeline(args.config)
 
-    # Show audit history and exit
+    pd.set_option("display.max_columns", None)
+    pd.set_option("display.width", 140)
+    pd.set_option("display.max_colwidth", 60)
+
+    # ── Query / reporting commands ───────────────
     if args.history:
-        history = pipeline.get_audit_history(20)
-        if history.empty:
+        df = pipeline.get_history(limit=20, status=args.status)
+        if df.empty:
             print("No pipeline runs recorded yet.")
         else:
-            pd.set_option("display.max_columns", None)
-            pd.set_option("display.width", 120)
-            print("\nLast 20 pipeline runs:\n")
-            print(history.to_string(index=False))
+            print("\nRecent pipeline runs:\n")
+            print(df.to_string(index=False))
         return
 
+    if args.repairs:
+        df = pipeline.get_repairs(run_id=args.repairs)
+        if df.empty:
+            print(f"No repair attempts found for run_id={args.repairs}")
+        else:
+            print(f"\nRepair attempts for run_id={args.repairs}:\n")
+            print(df.to_string(index=False))
+        return
+
+    if args.issues:
+        df = pipeline.get_issues(run_id=args.issues)
+        if df.empty:
+            print(f"No issue events found for run_id={args.issues}")
+        else:
+            print(f"\nIssue events for run_id={args.issues}:\n")
+            print(df.to_string(index=False))
+        return
+
+    if args.stats:
+        pipeline.print_stats()
+        return
+
+    if args.export_audit:
+        pipeline.export_audit("audit_export.json")
+        print("Exported → audit_export.json")
+        return
+
+    # ── Main run ─────────────────────────────────
     if not args.input:
         print("Error: --input is required. Use --help for usage.")
         sys.exit(1)
@@ -466,7 +514,7 @@ def main() -> None:
         run_id=args.run_id,
     )
 
-    # Exit code reflects run status
+    # Non-zero exit on hard failure or quarantine
     sys.exit(0 if result.status in ("success", "partial") else 1)
 
 

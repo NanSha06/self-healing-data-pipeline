@@ -1,0 +1,33 @@
+{
+  "exported_at": "2026-05-31T11:13:45.128106",
+  "pipeline_runs": [
+    {
+      "run_id": "test001",
+      "timestamp": "2026-05-31T11:13:45.068137",
+      "status": "partial",
+      "total_rows": 20,
+      "validation_issues": 8,
+      "anomalies_detected": 3,
+      "issues_healed": 7,
+      "issues_remaining": 4,
+      "heal_attempts": 2,
+      "duration_seconds": 12.4,
+      "input_path": "data/sample.csv"
+    }
+  ],
+  "repair_attempts": [
+    {
+      "run_id": "test001",
+      "batch_id": "test001",
+      "attempt_number": 1,
+      "outcome": "success",
+      "confidence": 0.92,
+      "diagnosis": "Null values in age column.",
+      "issues_before": 8,
+      "issues_after": 4,
+      "error_message": "",
+      "timestamp": "2026-05-31T11:13:45.075620"
+    }
+  ],
+  "issue_events": []
+}
