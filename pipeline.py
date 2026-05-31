@@ -37,6 +37,7 @@ from loguru import logger
 from dotenv import load_dotenv
 from typing import Optional
 
+from ingestion import Ingestor
 from validator import Validator
 from anomaly   import AnomalyDetector
 from healer    import Healer
@@ -154,6 +155,7 @@ class Pipeline:
         os.makedirs(self.output_dir, exist_ok=True)
 
         # Core modules
+        self.ingestor  = Ingestor()
         self.validator = Validator(config_path)
         self.detector  = AnomalyDetector(config_path)
         self.healer    = Healer(config_path)
@@ -250,36 +252,15 @@ class Pipeline:
     ) -> Optional[pd.DataFrame]:
         logger.info("[ Stage 1 / 5 ]  Ingesting data...")
 
-        try:
-            if isinstance(input_source, pd.DataFrame):
-                df = input_source.copy()
-                logger.info(f"Loaded DataFrame directly — {len(df)} rows, {len(df.columns)} cols.")
-            else:
-                if not os.path.exists(input_source):
-                    raise FileNotFoundError(f"Input file not found: {input_source}")
-                ext = os.path.splitext(input_source)[1].lower()
-                loaders = {
-                    ".csv":     pd.read_csv,
-                    ".xlsx":    pd.read_excel,
-                    ".xls":     pd.read_excel,
-                    ".json":    pd.read_json,
-                    ".parquet": pd.read_parquet,
-                }
-                if ext not in loaders:
-                    raise ValueError(f"Unsupported file format: '{ext}'")
-                df = loaders[ext](input_source)
-                logger.info(
-                    f"Loaded '{input_source}' — {len(df)} rows, {len(df.columns)} cols."
-                )
+        ingest_result = self.ingestor.load(input_source)
 
-            result.total_rows = len(df)
-            return df
-
-        except Exception as e:
+        if not ingest_result.success:
             result.status        = "failed"
-            result.error_message = f"Ingestion failed: {e}"
-            logger.error(result.error_message)
+            result.error_message = ingest_result.error_message
             return None
+
+        result.total_rows = ingest_result.row_count
+        return ingest_result.df
 
     def _stage_validate(self, df: pd.DataFrame, result: PipelineResult):
         logger.info("[ Stage 2 / 5 ]  Validating data...")
