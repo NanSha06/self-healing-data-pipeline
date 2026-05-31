@@ -295,7 +295,7 @@ if page == "🚀 Run Pipeline":
 
     with col2:
         st.markdown("<br>", unsafe_allow_html=True)
-        use_sample = st.button("📂 Use sample.csv", use_container_width=True)
+        use_sample = st.button("📂 Use sample.csv", width='stretch')
         if use_sample:
             st.session_state["use_sample"] = True
 
@@ -305,14 +305,14 @@ if page == "🚀 Run Pipeline":
             preview_df = pd.read_csv(uploaded_file)
             uploaded_file.seek(0)
             st.markdown(f"**Preview** — {len(preview_df)} rows × {len(preview_df.columns)} columns")
-            st.dataframe(preview_df.head(8), use_container_width=True, height=240)
+            st.dataframe(preview_df.head(8), width='stretch', height=240)
         except Exception as e:
             st.error(f"Could not read file: {e}")
 
     st.markdown("---")
 
     # Run button
-    run_clicked = st.button("▶ Run Pipeline", type="primary", use_container_width=False)
+    run_clicked = st.button("▶ Run Pipeline", type="primary", width='content')
 
     if run_clicked or st.session_state.get("run_triggered"):
         st.session_state.pop("run_triggered", None)
@@ -397,7 +397,7 @@ if page == "🚀 Run Pipeline":
             if result.output_path and os.path.exists(result.output_path):
                 with st.expander("📄 View cleaned output", expanded=False):
                     clean_df = pd.read_csv(result.output_path)
-                    st.dataframe(clean_df, use_container_width=True, height=300)
+                    st.dataframe(clean_df, width='stretch', height=300)
                     st.download_button(
                         "⬇ Download clean CSV",
                         data=clean_df.to_csv(index=False),
@@ -486,7 +486,7 @@ elif page == "📊 Dashboard":
             display_df["timestamp"]
         ).dt.strftime("%Y-%m-%d %H:%M:%S")
 
-        st.dataframe(display_df, use_container_width=True, height=350)
+        st.dataframe(display_df, width='stretch', height=350)
 
         # ── Status filter ────────────────────────
         st.markdown("---")
@@ -505,7 +505,7 @@ elif page == "📊 Dashboard":
         st.dataframe(
             filtered[["run_id", "timestamp", "status", "total_rows",
                        "issues_healed", "issues_remaining", "duration_seconds"]],
-            use_container_width=True, height=250
+            width='stretch', height=250
         )
 
 
@@ -560,13 +560,13 @@ elif page == "🔬 Issue Explorer":
                 st.markdown("#### By issue type")
                 type_counts = issues_df["issue_type"].value_counts().reset_index()
                 type_counts.columns = ["issue_type", "count"]
-                st.dataframe(type_counts, use_container_width=True, height=220)
+                st.dataframe(type_counts, width='stretch', height=220)
 
             with col2:
                 st.markdown("#### By column")
                 col_counts = issues_df["column_name"].value_counts().reset_index()
                 col_counts.columns = ["column", "count"]
-                st.dataframe(col_counts, use_container_width=True, height=220)
+                st.dataframe(col_counts, width='stretch', height=220)
 
             st.markdown("---")
             st.markdown("#### Full issue log")
@@ -576,7 +576,7 @@ elif page == "🔬 Issue Explorer":
             ]
             st.dataframe(
                 issues_df[[c for c in display_cols if c in issues_df.columns]],
-                use_container_width=True, height=360
+                width='stretch', height=360
             )
 
 
@@ -677,7 +677,7 @@ elif page == "📁 Audit Export":
                 data=runs_df.to_csv(index=False),
                 file_name="pipeline_runs.csv",
                 mime="text/csv",
-                use_container_width=True,
+                width='stretch',
             )
 
         with col2:
@@ -688,7 +688,7 @@ elif page == "📁 Audit Export":
                     data=issues_df.to_csv(index=False),
                     file_name="issue_events.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width='stretch',
                 )
             else:
                 st.caption("No issue data yet.")
@@ -701,7 +701,7 @@ elif page == "📁 Audit Export":
                     data=repairs_df.to_csv(index=False),
                     file_name="repair_attempts.csv",
                     mime="text/csv",
-                    use_container_width=True,
+                    width='stretch',
                 )
             else:
                 st.caption("No repair data yet.")
@@ -721,5 +721,5 @@ elif page == "📁 Audit Export":
             data=json.dumps(export_data, indent=2, default=str),
             file_name="audit_export.json",
             mime="application/json",
-            use_container_width=False,
+            width='content',
         )

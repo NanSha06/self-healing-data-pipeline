@@ -496,13 +496,18 @@ class Healer:
         BLOCKED_MODULES = {"os", "sys", "subprocess", "socket", "shutil",
                            "pathlib", "http", "urllib", "requests", "open"}
 
+        import datetime as _datetime_module
+
         safe_globals = {
             "__builtins__": builtins,   # full builtins — needed for imports inside fn
             "pd": pd,
             "np": __import__("numpy"),
             "re": re,
             "math": math,
-            "datetime": __import__("datetime"),
+            # Expose the datetime module so both styles work in LLM-generated code:
+            #   import datetime              -> datetime.datetime.now()
+            #   from datetime import datetime -> datetime.now()
+            "datetime": _datetime_module,
         }
         local_ns: dict = {}
 
