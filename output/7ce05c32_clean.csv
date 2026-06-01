@@ -1,0 +1,21 @@
+id,name,age,email,country,salary,signup_date
+1,Alice Johnson,29.0,alice@example.com,IN,55000.0,2024-01-15
+2,Bob Smith,35.0,,US,62000.0,2024-02-20
+3,Charlie Brown,120.0,charlie@example.com,IN,48000.0,2024-03-10
+4,Diana Prince,34.0,diana@example.com,DE,71000.0,2024-04-05
+5,Evan Wright,27.0,evan@example.com,FR,53000.0,2024-05-18
+6,Fiona Green,0.0,fiona@example.com,IN,49000.0,2024-06-22
+7,George Hall,41.0,alice@example.com,UK,84000.0,2024-07-30
+8,Hannah Lee,38.0,hannah@example.com,US,,2024-08-14
+9,Ivan Petrov,52.0,ivan@example.com,DE,91000.0,2024-01-15
+10,Julia Roberts,29.0,julia@example.com,IN,67000.0,2024-10-01
+11,Kevin Nash,120.0,kevin@example.com,US,58000.0,2024-11-03
+12,Laura Palmer,33.0,alice@example.com,FR,72000.0,2024-12-19
+13,Mike Tyson,45.0,mike@example.com,IN,63000.0,2024-01-25
+14,Nina Simone,31.0,nina@example.com,IN,55000.0,2024-02-14
+15,Oscar Wilde,28.0,oscar@example.com,UK,49500.0,2024-03-30
+16,Paula Abdul,36.0,paula@example.com,US,77000.0,2025-01-10
+17,Quinn Hughes,35.0,quinn@example.com,CA,61000.0,2025-02-28
+18,Rachel Green,29.0,,IN,,2025-03-15
+19,Steve Rogers,105.0,steve@example.com,US,95000.0,2025-04-20
+20,Tina Turner,44.0,tina@example.com,FR,82000.0,2025-05-05

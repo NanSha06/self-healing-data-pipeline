@@ -1,0 +1,124 @@
+# ─────────────────────────────────────────────
+# Self-Healing Data Pipeline — Docker Compose
+# ─────────────────────────────────────────────
+#
+# Services:
+#   redis      : Redis 7 (message broker + streams)
+#   consumer   : Redis Stream consumer (runs the pipeline)
+#   api        : FastAPI REST endpoint  (port 8000)
+#   streamlit  : Streamlit dashboard    (port 8501)
+#
+# Usage:
+#   docker-compose up --build          # first run
+#   docker-compose up -d               # background
+#   docker-compose logs -f consumer    # tail consumer logs
+#   docker-compose down                # stop everything
+#   docker-compose down -v             # stop + delete Redis data
+# ─────────────────────────────────────────────
+
+services:
+
+  # ── Redis ──────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: pipeline-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ── Stream Consumer ─────────────────────────
+  consumer:
+    build: .
+    container_name: pipeline-consumer
+    restart: unless-stopped
+    command: [ "python", "stream.py" ]
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JOBS_STREAM: pipeline:jobs
+      RESULTS_STREAM: pipeline:results
+      CONSUMER_GROUP: pipeline-workers
+      CONSUMER_NAME: consumer-1
+      CONFIG_PATH: config.yaml
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./quarantine:/app/quarantine
+      - ./logs:/app/logs
+      - ./config.yaml:/app/config.yaml:ro
+      - ./pipeline_audit.db:/app/pipeline_audit.db
+    healthcheck:
+      test: [ "CMD", "python", "-c", "import redis; redis.Redis(host='redis').ping()" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── FastAPI ─────────────────────────────────
+  api:
+    build: .
+    container_name: pipeline-api
+    restart: unless-stopped
+    command: [ "uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000" ]
+    ports:
+      - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      JOBS_STREAM: pipeline:jobs
+      RESULTS_STREAM: pipeline:results
+      UPLOAD_DIR: data
+      OUTPUT_DIR: output
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./config.yaml:/app/config.yaml:ro
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # ── Streamlit Dashboard ─────────────────────
+  streamlit:
+    build: .
+    container_name: pipeline-streamlit
+    restart: unless-stopped
+    command: [ "streamlit", "run", "app.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--server.headless", "true" ]
+    ports:
+      - "8501:8501"
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    volumes:
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./config.yaml:/app/config.yaml:ro
+      - ./pipeline_audit.db:/app/pipeline_audit.db
+
+# ── Volumes ─────────────────────────────────
+volumes:
+  redis_data:
+    driver: local
