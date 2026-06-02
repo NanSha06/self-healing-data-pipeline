@@ -38,3 +38,10 @@ pipeline:
   max_heal_retries: 3
   quarantine_on_failure: true
   confidence_threshold: 0.7
+
+anomaly_detection:
+  zscore_threshold: 3.0
+  iqr_multiplier: 1.5
+  rare_category_threshold: 0.01
+  low_variance_threshold: 0.01
+  min_rows_for_stats: 10

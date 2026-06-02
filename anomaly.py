@@ -160,9 +160,22 @@ class AnomalyDetector:
         if dup_anomaly:
             report.anomalies.append(dup_anomaly)
 
+        # Build a set of columns declared as 'date' type in the schema
+        # so we can skip numeric checks on date columns (they parse to timestamps
+        # which cause false-positive outlier and low-variance anomalies after healing)
+        date_cols = {
+            col for col, rules in self.schema.items()
+            if rules.get("type") == "date"
+        }
+
         # Column-level checks
         for col in df.columns:
             series = df[col]
+
+            # Skip numeric anomaly checks on date columns entirely
+            if col in date_cols:
+                continue
+
             numeric = pd.to_numeric(series, errors="coerce")
             is_numeric = numeric.notna().sum() > numeric.isna().sum()  # majority numeric
 

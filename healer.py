@@ -139,15 +139,18 @@ class Healer:
 
         Rules for fix_code:
         - Define a function named apply_fix(df) that accepts a pandas DataFrame and returns a fixed DataFrame.
-        - import pandas as pd and numpy as np inside the function if needed.
+        - Always start with: import pandas as pd; import numpy as np
+        - For datetime: use "from datetime import datetime" (NOT "import datetime") to avoid AttributeError.
         - Do NOT modify the DataFrame in-place — always work on a copy: df = df.copy()
-        - Handle edge cases: check column existence before operating on columns.
-        - For null values: fill with median (numeric) or mode (string) unless a better strategy is obvious.
-        - For out-of-range values: clip to valid bounds or replace with median.
-        - For invalid strings (email, date, etc.): set to None/NaN so downstream can handle gracefully.
-        - For invalid category codes: replace with the most frequent valid value.
-        - Keep the fix targeted — only fix what the report describes, leave other columns untouched.
-        - The function must be syntactically correct Python.
+        - Check column existence before operating: if 'col' in df.columns:
+        - For null numeric values: fill with median — df[col].fillna(df[col].median())
+        - For null string values: fill with mode — df[col].fillna(df[col].mode()[0]) if not df[col].mode().empty else df[col]
+        - For out-of-range values: clip to valid bounds — df[col] = df[col].clip(lower=min_val, upper=max_val)
+        - For invalid emails: set to None — df[col] = df[col].apply(lambda x: x if pd.notnull(x) and "@" in str(x) and "." in str(x).split("@")[-1] else None)
+        - For invalid category codes: replace with mode of valid values only — valid = df[col][df[col].isin(valid_list)]; df[col] = df[col].apply(lambda x: x if x in valid_list else (valid.mode()[0] if not valid.mode().empty else valid_list[0]))
+        - For unparseable dates: use pd.to_datetime(df[col], errors="coerce") — this sets bad values to NaT automatically. Do NOT fill NaT with datetime.now() as it creates low-variance anomalies.
+        - Keep the fix targeted — only fix the columns mentioned in the issues report.
+        - The function must be syntactically valid Python that runs without errors.
     """).strip()
 
     def __init__(self, config_path: str = "config.yaml"):

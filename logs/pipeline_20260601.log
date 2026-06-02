@@ -6,3 +6,139 @@
 2026-06-01 13:11:56 | DEBUG    | Audit DB schema initialised.
 2026-06-01 13:11:56 | DEBUG    | AuditLogger initialised — db=pipeline_audit.db
 2026-06-01 13:11:56 | INFO     | Pipeline initialised. config=config.yaml
+2026-06-01 13:17:14 | INFO     | Validator loaded schema with 7 column rule(s).
+2026-06-01 13:17:14 | INFO     | AnomalyDetector initialised. Config: {'zscore_threshold': 3.0, 'iqr_multiplier': 1.5, 'rare_category_threshold': 0.01, 'low_variance_threshold': 0.01, 'min_rows_for_stats': 10}
+2026-06-01 13:17:15 | INFO     | Validator loaded schema with 7 column rule(s).
+2026-06-01 13:17:15 | INFO     | AnomalyDetector initialised. Config: {'zscore_threshold': 3.0, 'iqr_multiplier': 1.5, 'rare_category_threshold': 0.01, 'low_variance_threshold': 0.01, 'min_rows_for_stats': 10}
+2026-06-01 13:17:15 | INFO     | Healer initialised. model=meta/llama-3.1-70b-instruct | max_retries=3 | confidence_threshold=0.7
+2026-06-01 13:17:15 | DEBUG    | Audit DB schema initialised.
+2026-06-01 13:17:15 | DEBUG    | AuditLogger initialised — db=pipeline_audit.db
+2026-06-01 13:17:15 | INFO     | Pipeline initialised. config=config.yaml
+2026-06-01 13:17:15 | INFO     | ──────────────────────────────────────────────────
+2026-06-01 13:17:15 | INFO     | Pipeline run started  run_id=a4985d76
+2026-06-01 13:17:15 | INFO     | ──────────────────────────────────────────────────
+2026-06-01 13:17:15 | INFO     | [ Stage 1 / 5 ]  Ingesting data...
+2026-06-01 13:17:15 | SUCCESS  | ✅ Ingested [file_csv] 'data/sample.csv' — 20 rows × 7 cols in 78ms
+2026-06-01 13:17:15 | INFO     | [ Stage 2 / 5 ]  Validating data...
+2026-06-01 13:17:15 | INFO     | Starting validation — 20 rows, 7 columns.
+2026-06-01 13:17:15 | WARNING  | Issue in 'age': null_values — 2 row(s) affected.
+2026-06-01 13:17:15 | WARNING  | Issue in 'age': out_of_range — 3 row(s) affected.
+2026-06-01 13:17:15 | WARNING  | Issue in 'email': null_values — 1 row(s) affected.
+2026-06-01 13:17:15 | WARNING  | Issue in 'email': regex_mismatch — 3 row(s) affected.
+2026-06-01 13:17:15 | WARNING  | Issue in 'country': invalid_value — 2 row(s) affected.
+2026-06-01 13:17:15 | WARNING  | Issue in 'signup_date': type_mismatch — 1 row(s) affected.
+2026-06-01 13:17:15 | ERROR    | Validation failed — 6 issue(s) found.
+2026-06-01 13:17:15 | WARNING  | Validation found 6 issue(s):
+❌ Validation failed — 6 issue(s) found across 20 rows.
+  [1] 'age' | null_values | Column is non-nullable but contains 2 null/missing value(s). (2 row(s) affected)
+  [2] 'age' | out_of_range | Values outside allowed range (min=0, max=120): 3 violation(s). (3 row(s) affected)
+  [3] 'email' | null_values | Column is non-nullable but contains 1 null/missing value(s). (1 row(s) affected)
+  [4] 'email' | regex_mismatch | Values do not match required pattern '^[\w.-]+@[\w.-]+\.\w+$': 3 violation(s). (3 row(s) affected)
+  [5] 'country' | invalid_value | Values not in allowed list ['IN', 'US', 'UK', 'DE', 'FR', 'CA']: 2 violation(s). (2 row(s) affected)
+  [6] 'signup_date' | type_mismatch | Values declared as 'date' but could not be parsed: 1 violation(s). (1 row(s) affected)
+2026-06-01 13:17:15 | INFO     | [ Stage 3 / 5 ]  Detecting anomalies...
+2026-06-01 13:17:15 | INFO     | Starting anomaly detection — 20 rows, 7 columns.
+2026-06-01 13:17:15 | WARNING  | [MEDIUM] Anomaly in 'age': outlier_zscore — 1 row(s).
+2026-06-01 13:17:15 | WARNING  | [HIGH] Anomaly in 'age': outlier_iqr — 4 row(s).
+2026-06-01 13:17:15 | WARNING  | Anomaly detection complete — 2 anomaly(s) found (1 high severity).
+2026-06-01 13:17:15 | WARNING  | Anomaly detection found 2 anomaly(s):
+⚠️  2 anomaly(s) detected across 20 rows.
+   High severity: 1
+  [1] [MEDIUM] 'age' | outlier_zscore | 1 value(s) exceed 3.0σ from the mean (mean=105.28, std=232.36, max Z=3.85). (1 row(s))
+  [2] [HIGH] 'age' | outlier_iqr | 4 value(s) outside Tukey fences [5.38, 68.38] (IQR=15.75, k=1.5). (4 row(s))
+2026-06-01 13:17:15 | INFO     | [ Stage 4 / 5 ]  Healing 8 issue(s) (max 3 attempt(s))...
+2026-06-01 13:17:15 | INFO     | Healer starting — batch=a4985d76 | 8 issue(s) to fix.
+2026-06-01 13:17:15 | INFO     | Heal attempt 1/3...
+2026-06-01 13:17:41 | DEBUG    | Raw LLM response:
+{
+  "diagnosis": "The DataFrame contains various data quality issues including null values, out-of-range values, invalid emails, and invalid country codes. The root cause appears to be a combination of human error and lack of data validation during data entry.",
+  "fix_code": "import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else df['email'].mode()[0]); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df",
+  "confidence": 0.95
+}
+2026-06-01 13:17:41 | INFO     | LLM diagnosis: The DataFrame contains various data quality issues including null values, out-of-range values, invalid emails, and invalid country codes. The root cause appears to be a combination of human error and lack of data validation during data entry.
+2026-06-01 13:17:41 | INFO     | LLM confidence: 0.95
+2026-06-01 13:17:41 | DEBUG    | Fix code that failed:
+import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else df['email'].mode()[0]); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+2026-06-01 13:17:41 | DEBUG    | Full traceback:
+Traceback (most recent call last):
+  File "C:\Users\hp\OneDrive\Desktop\self_healing_data_pipeline\healer.py", line 528, in _execute_fix
+    exec(fix_code, safe_globals, local_ns)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1
+    import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else df['email'].mode()[0]); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+                                                                            ^^^
+SyntaxError: invalid syntax
+
+2026-06-01 13:17:41 | ERROR    | Fix execution failed: Traceback (most recent call last):
+  File "C:\Users\hp\OneDrive\Desktop\self_healing_data_pipeline\healer.py", line 528, in _execute_fix
+    exec(fix_code, safe_globals, local_ns)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1
+    import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else df['email'].mode()[0]); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+                                                                            ^^^
+SyntaxError: invalid syntax
+
+2026-06-01 13:17:41 | INFO     | Heal attempt 2/3...
+2026-06-01 13:18:27 | DEBUG    | Raw LLM response:
+{
+  "diagnosis": "The DataFrame contains various data quality issues including null values, out-of-range values, invalid emails, invalid country codes, and unparseable dates. The previous fix attempt failed due to a syntax error in the fix code.",
+  "fix_code": "import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df",
+  "confidence": 0.95
+}
+2026-06-01 13:18:27 | INFO     | LLM diagnosis: The DataFrame contains various data quality issues including null values, out-of-range values, invalid emails, invalid country codes, and unparseable dates. The previous fix attempt failed due to a syntax error in the fix code.
+2026-06-01 13:18:27 | INFO     | LLM confidence: 0.95
+2026-06-01 13:18:27 | DEBUG    | Fix code that failed:
+import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+2026-06-01 13:18:27 | DEBUG    | Full traceback:
+Traceback (most recent call last):
+  File "C:\Users\hp\OneDrive\Desktop\self_healing_data_pipeline\healer.py", line 528, in _execute_fix
+    exec(fix_code, safe_globals, local_ns)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1
+    import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+                                                                            ^^^
+SyntaxError: invalid syntax
+
+2026-06-01 13:18:27 | ERROR    | Fix execution failed: Traceback (most recent call last):
+  File "C:\Users\hp\OneDrive\Desktop\self_healing_data_pipeline\healer.py", line 528, in _execute_fix
+    exec(fix_code, safe_globals, local_ns)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1
+    import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+                                                                            ^^^
+SyntaxError: invalid syntax
+
+2026-06-01 13:18:27 | INFO     | Heal attempt 3/3...
+2026-06-01 13:19:39 | DEBUG    | Raw LLM response:
+{"diagnosis": "The DataFrame contains various data quality issues including null values, out-of-range values, invalid emails, invalid country codes, and unparseable dates.", "fix_code": "import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df", "confidence": 0.95}
+2026-06-01 13:19:39 | INFO     | LLM diagnosis: The DataFrame contains various data quality issues including null values, out-of-range values, invalid emails, invalid country codes, and unparseable dates.
+2026-06-01 13:19:39 | INFO     | LLM confidence: 0.95
+2026-06-01 13:19:39 | DEBUG    | Fix code that failed:
+import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+2026-06-01 13:19:39 | DEBUG    | Full traceback:
+Traceback (most recent call last):
+  File "C:\Users\hp\OneDrive\Desktop\self_healing_data_pipeline\healer.py", line 528, in _execute_fix
+    exec(fix_code, safe_globals, local_ns)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1
+    import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+                                                                            ^^^
+SyntaxError: invalid syntax
+
+2026-06-01 13:19:39 | ERROR    | Fix execution failed: Traceback (most recent call last):
+  File "C:\Users\hp\OneDrive\Desktop\self_healing_data_pipeline\healer.py", line 528, in _execute_fix
+    exec(fix_code, safe_globals, local_ns)  # noqa: S102
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 1
+    import pandas as pd; import numpy as np; from datetime import datetime; def apply_fix(df): df = df.copy(); if 'age' in df.columns: df['age'] = df['age'].fillna(df['age'].median()); df['age'] = df['age'].clip(lower=0, upper=120); if 'email' in df.columns: df['email'] = df['email'].fillna(df['email'].mode()[0] if not df['email'].mode().empty else 'unknown'); df['email'] = df['email'].apply(lambda x: x if pd.notnull(x) and '@' in str(x) and '.' in str(x).split('@')[-1] else None); if 'country' in df.columns: valid = df['country'][df['country'].isin(['IN', 'US', 'UK', 'DE', 'FR', 'CA'])]; df['country'] = df['country'].apply(lambda x: x if x in ['IN', 'US', 'UK', 'DE', 'FR', 'CA'] else (valid.mode()[0] if not valid.mode().empty else 'IN')); if 'signup_date' in df.columns: df['signup_date'] = pd.to_datetime(df['signup_date'], errors='coerce'); return df
+                                                                            ^^^
+SyntaxError: invalid syntax
+
+2026-06-01 13:19:39 | ERROR    | Healing failed after 3 attempt(s).
+2026-06-01 13:19:39 | WARNING  | Batch quarantined → quarantine\a4985d76_20260601_131939_data.csv | Report → quarantine\a4985d76_20260601_131939_report.json
+2026-06-01 13:19:39 | WARNING  | Batch quarantined — returning original DataFrame.
+2026-06-01 13:19:39 | INFO     | [ Stage 5 / 5 ]  Writing output...
+2026-06-01 13:19:39 | SUCCESS  | Output written → output\a4985d76_clean.csv  (20 rows)
+2026-06-01 13:19:39 | DEBUG    | Run logged — run_id=a4985d76 status=quarantined
+2026-06-01 13:19:39 | DEBUG    | Issues logged — run_id=a4985d76 count=8
+2026-06-01 13:19:39 | DEBUG    | Repair attempts logged — run_id=a4985d76 batch=a4985d76 count=3
